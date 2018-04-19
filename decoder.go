@@ -347,6 +347,7 @@ func Unmarshal(pathPrefix string, kvps api.KVPairs, v interface{}) error {
 // Unmarshal - this is the Unmarshal method on a custom decoder.  Same as above
 // otherwise.
 func (d *Decoder) Unmarshal(pathPrefix string, kvps api.KVPairs, v interface{}) error {
+	fmt.Printf("Unmarshal: pathPrefix: %s\n", pathPrefix)
 	valp := reflect.ValueOf(v)
 	if valp.Kind() != reflect.Ptr {
 		return InvalidValueErr
@@ -381,12 +382,15 @@ func (d *Decoder) Unmarshal(pathPrefix string, kvps api.KVPairs, v interface{}) 
 			continue
 		}
 
-		k := strings.TrimPrefix(kvp.Key, pathPrefix)
-		if pathPrefix != "" && k == kvp.Key {
-			continue // doesn't match what we're supposed to.  perhaps error?
-		}
+		key := kvp.Key
 		if !d.CaseSensitive {
-			k = strings.ToLower(k)
+			key = strings.ToLower(key)
+			pathPrefix = strings.ToLower(pathPrefix)
+		}
+
+		k := strings.TrimPrefix(key, pathPrefix)
+		if pathPrefix != "" && k == key {
+			continue // doesn't match what we're supposed to.  perhaps error?
 		}
 
 		for {
@@ -427,9 +431,16 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 			if tfm.computedType == typeStruct || tfm.json {
 				st = reflect.New(loc.ttype)
 				newprefix := path.Join(prefix, tfm.fieldName) + "/"
-				ind := strings.TrimPrefix(thisPair.Key, newprefix)
+				key := thisPair.Key
+				if !d.CaseSensitive {
+					key = strings.ToLower(key)
+					newprefix = strings.ToLower(newprefix)
+				}
+				ind := strings.TrimPrefix(key, newprefix)
+				fmt.Printf("newprefix: %s, ind: %s, thisPair: %s => %s\n", newprefix, ind, thisPair.Key, string(thisPair.Value))
 				pathparts := strings.Split(ind, "/")
 				newprefix = path.Join(newprefix, pathparts[0]) + "/"
+				fmt.Printf("newnewprefix: %s\n", newprefix)
 				if tfm.json {
 					err := json.Unmarshal(thisPair.Value, st.Interface())
 					if err != nil {
@@ -439,7 +450,14 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					// Process all the pairs related to this prefix.
 					curatedPairs := api.KVPairs{thisPair}
 					for i := 0; i < len(*rest); i++ {
-						if strings.HasPrefix((*rest)[0].Key, newprefix) {
+						key := (*rest)[0].Key
+						if !d.CaseSensitive {
+							key = strings.ToLower(key)
+							newprefix = strings.ToLower(newprefix)
+						}
+						fmt.Printf("curated key: %s, prefix: %s\n", key, newprefix)
+						if strings.HasPrefix(key, newprefix) {
+							fmt.Println("appending curated pair")
 							curatedPairs = append(curatedPairs, (*rest)[0])
 							*rest = (*rest)[1:]
 						} else {
@@ -450,6 +468,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					if err != nil {
 						return err
 					}
+
 				}
 
 			} else {
@@ -509,8 +528,18 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					sfield.Set(reflect.MakeMap(sfield.Type()))
 				}
 				trimpath := path.Join(prefix, tfm.fieldName) + "/"
-				key := strings.TrimPrefix(thisPair.Key, trimpath)
-				sfield.SetMapIndex(reflect.ValueOf(key), st)
+				key := thisPair.Key
+				if !d.CaseSensitive {
+					key = strings.ToLower(key)
+					trimpath = strings.ToLower(trimpath)
+				}
+				fmt.Printf("map key: %s, trimpath: %s\n", key, trimpath)
+
+				key = strings.TrimPrefix(key, trimpath)
+
+				splitKey := strings.Split(key, "/")
+
+				sfield.SetMapIndex(reflect.ValueOf(splitKey[0]), st)
 			} else { // slice
 				sfield.Set(reflect.Append(sfield, st))
 			}

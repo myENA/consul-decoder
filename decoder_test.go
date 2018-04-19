@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const prefix = "testing/decoder"
+const prefix = "testing"
 
 type CBConfig struct {
 	BackupReportLogsExpiry int
@@ -28,24 +28,23 @@ type TestStruct struct {
 	Field2 string `decoder:"field2" json:"field2"`
 }
 type tbConfig struct {
-	ApiPort              int               `decoder:"apiPort"`
-	Couchbase            *CBConfig         `decoder:"couchbase"`
-	PrivateHostName      string            `decoder:"privateHostName"`
-	PrivatePort          int               `decoder:"privatePort"`
-	PoductName           string            `decoder:"productName"`
-	PublishedPrivatePort int               `decoder:"publishedPrivatePort"`
-	PublishedTunnelPort  int               `decoder:"publishedTunnelPort"`
-	Rados                map[string]string `decoder:"radosgw"`
-	TestArray            []*TestStruct     `decoder:"testarray"`
-	TestInlineArray      []*TestStruct     `decoder:"testInlineArray,json"`
-	TestByteSlice        []byte            `decoder:"testbyteslice"`
-	TestDuration         time.Duration     `decoder:"testDuration"`
-	TestIP               net.IP            `decoder:"testIP"`
-	TestMask             net.IPMask        `decoder:"testMask"`
-	TestSliceString      []string          `decoder:"testslicestring,json"`
-	NoTag                string
-	IgnoreMe             string `decoder:"-"`
-	ImSpecial            string
+	TestInlineArray     []*TestStruct  `decoder:"testInlineArray"`
+	TestInlineArray2    *[]*TestStruct `decoder:"testInlineArray2"`
+	TestMapStringStruct map[string]*TestStruct
+	TestMapStringString map[string]string
+
+	TestByteSlice   []byte        `decoder:"testbyteslice"`
+	TestDuration    time.Duration `decoder:"testDuration"`
+	TestIP          net.IP        `decoder:"testIP"`
+	TestMask        net.IPMask    `decoder:"testMask"`
+	TestSliceString []string      `decoder:"testslicestring,json"`
+	Duration        time.Duration
+	IPV4            net.IP
+	IPV6            net.IP
+
+	NoTag     string
+	IgnoreMe  string `decoder:"-"`
+	ImSpecial string
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
@@ -109,10 +108,36 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "ignoreme", "i should not exist")
 		es.seed(client, "im-special", "super duper special")
 		es.seed(client, "testslicestring", "[\"foo\",\"bar\",\"baz\"]")
+		es.seed(client, "testInlineArray/one/field1", "field1rec1")
+		es.seed(client, "testInlineArray/one/field2", "field2rec1")
+		es.seed(client, "testInlineArray/two/field1", "field1rec2")
+		es.seed(client, "testInlineArray/two/field2", "field2rec2")
+		es.seed(client, "testInlineArray2/one/field1", "field1p2rec1")
+		es.seed(client, "testInlineArray2/one/field2", "field2p2rec1")
+		es.seed(client, "testInlineArray2/two/field1", "field1p2rec2")
+		es.seed(client, "testInlineArray2/two/field2", "field2p2rec2")
+		es.seed(client, "testMapStringStruct/key1/field1", "msskey1field1val")
+		es.seed(client, "testMapStringStruct/key1/field2", "msskey1field2val")
+		es.seed(client, "testMapStringStruct/key2/field1", "msskey2field1val")
+		es.seed(client, "testMapStringStruct/key2/field2", "msskey2field2val")
+		es.seed(client, "testMapStringStruct/key3/field1", "msskey3field1val")
+		es.seed(client, "testMapStringStruct/key3/field2", "msskey3field2val")
+		es.seed(client, "testmapstringstring/key1", "value1")
+		es.seed(client, "testmapstringstring/key2", "value2")
+		es.seed(client, "duration", "30s")
+		es.seed(client, "ipv4", "1.2.3.4")
+		es.seed(client, "ipv6", "::1")
+
 	})
 
 	kvs, _, err := client.KV().List(prefix, nil)
 	es.Assert().Nil(err, "Unable to list keys: \"%s\"", err)
+
+	es.T().Log("kvs")
+	for _, kv := range kvs {
+		es.T().Logf("%s => %s", kv.Key, string(kv.Value))
+
+	}
 
 	decoder := &Decoder{
 		NameResolver: func(f, t string) string {
@@ -142,6 +167,32 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal("super duper special", tbc.ImSpecial)
 	es.Assert().Equal("i should exist", tbc.NoTag)
 	es.Assert().Len(tbc.TestSliceString, 3, "length not correct: %#v", tbc.TestSliceString)
+	es.Assert().Equal(tbc.TestMapStringString["key1"], "value1")
+	es.Assert().Equal(tbc.TestMapStringString["key2"], "value2")
+	es.Assert().Len(tbc.TestInlineArray, 2)
+	es.Assert().Equal(tbc.TestInlineArray[0].Field1, "field1rec1")
+	es.Assert().Equal(tbc.TestInlineArray[0].Field2, "field2rec1")
+	es.Assert().Equal(tbc.TestInlineArray[1].Field1, "field1rec2")
+	es.Assert().Equal(tbc.TestInlineArray[1].Field2, "field2rec2")
+	es.Assert().Len(*tbc.TestInlineArray2, 2)
+	es.Assert().Equal((*tbc.TestInlineArray2)[0].Field1, "field1p2rec1")
+	es.Assert().Equal((*tbc.TestInlineArray2)[0].Field2, "field2p2rec1")
+	es.Assert().Equal((*tbc.TestInlineArray2)[1].Field1, "field1p2rec2")
+	es.Assert().Equal((*tbc.TestInlineArray2)[1].Field2, "field2p2rec2")
+	es.Assert().Len(tbc.TestMapStringStruct, 3)
+	es.Assert().Equal(tbc.TestMapStringStruct["key1"].Field1, "msskey1field1val")
+	es.Assert().Equal(tbc.TestMapStringStruct["key1"].Field2, "msskey1field2val")
+	es.Assert().Equal(tbc.TestMapStringStruct["key2"].Field1, "msskey2field1val")
+	es.Assert().Equal(tbc.TestMapStringStruct["key2"].Field2, "msskey2field2val")
+	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field1, "msskey3field1val")
+	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field2, "msskey3field2val")
+	es.Assert().Equal(tbc.Duration, time.Second*30)
+	ipv4 := net.ParseIP("1.2.3.4")
+	ipv6 := net.ParseIP("::1")
+
+	es.Assert().True(ipv4.Equal(tbc.IPV4))
+	es.Assert().True(ipv6.Equal(tbc.IPV6))
+
 	es.T().Log(string(payload))
 	es.T().Logf("netmask %s", tbc.TestMask.String())
 }
