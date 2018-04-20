@@ -347,7 +347,6 @@ func Unmarshal(pathPrefix string, kvps api.KVPairs, v interface{}) error {
 // Unmarshal - this is the Unmarshal method on a custom decoder.  Same as above
 // otherwise.
 func (d *Decoder) Unmarshal(pathPrefix string, kvps api.KVPairs, v interface{}) error {
-	fmt.Printf("Unmarshal: pathPrefix: %s\n", pathPrefix)
 	valp := reflect.ValueOf(v)
 	if valp.Kind() != reflect.Ptr {
 		return InvalidValueErr
@@ -437,10 +436,8 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					newprefix = strings.ToLower(newprefix)
 				}
 				ind := strings.TrimPrefix(key, newprefix)
-				fmt.Printf("newprefix: %s, ind: %s, thisPair: %s => %s\n", newprefix, ind, thisPair.Key, string(thisPair.Value))
 				pathparts := strings.Split(ind, "/")
 				newprefix = path.Join(newprefix, pathparts[0]) + "/"
-				fmt.Printf("newnewprefix: %s\n", newprefix)
 				if tfm.json {
 					err := json.Unmarshal(thisPair.Value, st.Interface())
 					if err != nil {
@@ -455,9 +452,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 							key = strings.ToLower(key)
 							newprefix = strings.ToLower(newprefix)
 						}
-						fmt.Printf("curated key: %s, prefix: %s\n", key, newprefix)
 						if strings.HasPrefix(key, newprefix) {
-							fmt.Println("appending curated pair")
 							curatedPairs = append(curatedPairs, (*rest)[0])
 							*rest = (*rest)[1:]
 						} else {
@@ -533,7 +528,6 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					key = strings.ToLower(key)
 					trimpath = strings.ToLower(trimpath)
 				}
-				fmt.Printf("map key: %s, trimpath: %s\n", key, trimpath)
 
 				key = strings.TrimPrefix(key, trimpath)
 

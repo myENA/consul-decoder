@@ -13,20 +13,28 @@ import (
 
 const prefix = "testing"
 
-type CBConfig struct {
-	BackupReportLogsExpiry int
-	BucketName             string `decoder:"bucket-name"`
-	Password               string `decoder:"password"`
-}
-
-type RadosConfig struct {
-	UserPrefix string `cupate:"userPrefix"`
-}
-
 type TestStruct struct {
 	Field1 string `decoder:"field1" json:"field1"`
 	Field2 string `decoder:"field2" json:"field2"`
 }
+
+type TestLevel1 struct {
+	Uint   uint
+	Int    int
+	Level2 *TestLevel2
+}
+
+type TestLevel2 struct {
+	Uint   uint64
+	Int    int64
+	Level3 *TestLevel3
+}
+
+type TestLevel3 struct {
+	Uint uint32
+	Int  int32
+}
+
 type tbConfig struct {
 	TestInlineArray     []*TestStruct  `decoder:"testInlineArray"`
 	TestInlineArray2    *[]*TestStruct `decoder:"testInlineArray2"`
@@ -41,6 +49,8 @@ type tbConfig struct {
 	Duration        time.Duration
 	IPV4            net.IP
 	IPV6            net.IP
+
+	L1 *TestLevel1
 
 	NoTag     string
 	IgnoreMe  string `decoder:"-"`
@@ -128,6 +138,13 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "ipv4", "1.2.3.4")
 		es.seed(client, "ipv6", "::1")
 
+		es.seed(client, "l1/uint", "1")
+		es.seed(client, "l1/int", "-2")
+		es.seed(client, "l1/level2/uint", "3")
+		es.seed(client, "l1/level2/int", "-4")
+		es.seed(client, "l1/level2/level3/uint", "5")
+		es.seed(client, "l1/level2/level3/int", "-6")
+
 	})
 
 	kvs, _, err := client.KV().List(prefix, nil)
@@ -192,6 +209,13 @@ func (es *encoderTestSuite) TestUnmarshal() {
 
 	es.Assert().True(ipv4.Equal(tbc.IPV4))
 	es.Assert().True(ipv6.Equal(tbc.IPV6))
+
+	es.Assert().Equal(tbc.L1.Uint, uint(1))
+	es.Assert().Equal(tbc.L1.Int, int(-2))
+	es.Assert().Equal(tbc.L1.Level2.Uint, uint64(3))
+	es.Assert().Equal(tbc.L1.Level2.Int, int64(-4))
+	es.Assert().Equal(tbc.L1.Level2.Level3.Uint, uint32(5))
+	es.Assert().Equal(tbc.L1.Level2.Level3.Int, int32(-6))
 
 	es.T().Log(string(payload))
 	es.T().Logf("netmask %s", tbc.TestMask.String())
