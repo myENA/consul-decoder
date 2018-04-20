@@ -50,6 +50,8 @@ type tbConfig struct {
 	IPV4            net.IP
 	IPV6            net.IP
 
+	TestBool bool
+
 	L1 *TestLevel1
 
 	NoTag     string
@@ -137,6 +139,8 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "duration", "30s")
 		es.seed(client, "ipv4", "1.2.3.4")
 		es.seed(client, "ipv6", "::1")
+
+		es.seed(client, "testbool", "true")
 
 		es.seed(client, "l1/uint", "1")
 		es.seed(client, "l1/int", "-2")

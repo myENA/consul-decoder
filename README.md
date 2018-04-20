@@ -6,9 +6,10 @@
 
 Package decoder - this unmarshals or decodes values from a consul KV store into a struct. The following types are supported:
 
-* Integer (int/int8/int16/int32/int64)
-* Unsigned (uint/uint8/uint16/uint32/uint64)
-* Float (float64/float32)
+* integer (int/int8/int16/int32/int64)
+* unsigned (uint/uint8/uint16/uint32/uint64)
+* float (float64/float32)
+* bool
 * time.Duration
 * net.IP
 * net.IPMask

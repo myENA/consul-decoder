@@ -321,6 +321,11 @@ fieldLoop:
 				tm.tFieldsMetaMap[tfm.fieldName] = tfm
 
 				break Outer
+			case reflect.Bool:
+				tfm.locators = []tFieldLocator{tfl}
+				tfm.computedType = typeBool
+				tm.tFieldsMetaMap[tfm.fieldName] = tfm
+				break Outer
 			default:
 				if tfm.computedType == typeTextUnmarshaler {
 					tfm.locators = []tFieldLocator{tfl}
