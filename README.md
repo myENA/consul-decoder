@@ -17,10 +17,12 @@ Package decoder - this unmarshals or decodes values from a consul KV store into 
          is unmarshaled as json using json.Unmarshal
 
 * slice - the type can be most of the supported types, except another slice.
-* map - the key must be a string, the value can be anything but another map.         
+* map - the key must be a string, the value can be anything but another map.
+* encoding.TextUnmarshaler - any type that implements this will have its UnmarshalText() method called.         
 
 Struct tags
-By default, the decoder packages looks for the struct tag "decoder". However, this can be overridden inside the Decoder struct as shown below. For the purposes of examples, we'll stick with the default "decoder" tag.
+
+By default, the decoder packages looks for the struct tag "decoder". However, this can be overridden inside the Decoder (see godoc for details). For the purposes of examples, we'll stick with the default "decoder" tag.
 
 
 ```go

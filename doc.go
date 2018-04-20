@@ -12,17 +12,21 @@
 //              is unmarshaled as json using json.Unmarshal
 //     slice - the type can be most of the supported types, except another slice.
 //     map - the key must be a string, the value can be anything but another map.
+//     encoding.TextUnmarshaler - any type that implements this will have its
+//                                UnmarshalText() method called.
 //
 // Struct tags
 //
 // By default, the decoder packages looks for the struct tag "decoder".
 // However, this can be overridden inside the Decoder struct as shown below.
 // For the purposes of examples, we'll stick with the default "decoder" tag.
-// By default, in the absense of a decoer tag, it will look for a consul
+// By default, in the absence of a decoder tag, it will look for a consul
 // key name with the same name as the struct field.  Only exported struct
-// fields are considered.  The name comparison is case-insensitive.  the tag
-// "-" indicates to skip the field.  The modifier ",json" appended to the end
-// signals that the value is to be interpreted as json and unmarshaled.
+// fields are considered.  The name comparison is case-insensitive by default,
+// but this is configurable in the Decoder struct.  the tag "-" indicates to
+// skip the field.  The modifier ",json" appended to the end
+// signals that the value is to be interpreted as json and unmarshaled rather
+// than interpreted.
 //
 //     struct Foo {
 //
