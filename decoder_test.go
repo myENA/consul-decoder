@@ -208,6 +208,7 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field1, "msskey3field1val")
 	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field2, "msskey3field2val")
 	es.Assert().Equal(tbc.Duration, time.Second*30)
+	es.Assert().True(tbc.TestBool)
 	ipv4 := net.ParseIP("1.2.3.4")
 	ipv6 := net.ParseIP("::1")
 
