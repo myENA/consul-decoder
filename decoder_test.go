@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/consul/testutil"
 	"github.com/stretchr/testify/suite"
 	"net"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,6 +36,21 @@ type TestLevel3 struct {
 	Int  int32
 }
 
+type TestTextUnmarshaler struct {
+	Field1 string
+	Field2 string
+}
+
+func (ttu *TestTextUnmarshaler) UnmarshalText(text []byte) error {
+	bits := strings.Split(string(text), ":")
+	if len(bits) != 2 {
+		return fmt.Errorf("invalid field %s", string(text))
+	}
+	ttu.Field1 = bits[0]
+	ttu.Field2 = bits[1]
+	return nil
+}
+
 type tbConfig struct {
 	TestInlineArray     []*TestStruct  `decoder:"testInlineArray"`
 	TestInlineArray2    *[]*TestStruct `decoder:"testInlineArray2"`
@@ -49,6 +65,8 @@ type tbConfig struct {
 	Duration        time.Duration
 	IPV4            net.IP
 	IPV6            net.IP
+
+	TestTextUnmarshaler *TestTextUnmarshaler
 
 	TestBool bool
 
@@ -136,6 +154,7 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "testMapStringStruct/key3/field2", "msskey3field2val")
 		es.seed(client, "testmapstringstring/key1", "value1")
 		es.seed(client, "testmapstringstring/key2", "value2")
+		es.seed(client, "testtextunmarshaler", "val1:val2")
 		es.seed(client, "duration", "30s")
 		es.seed(client, "ipv4", "1.2.3.4")
 		es.seed(client, "ipv6", "::1")
@@ -207,6 +226,10 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal(tbc.TestMapStringStruct["key2"].Field2, "msskey2field2val")
 	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field1, "msskey3field1val")
 	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field2, "msskey3field2val")
+
+	es.Assert().Equal(tbc.TestTextUnmarshaler.Field1, "val1")
+	es.Assert().Equal(tbc.TestTextUnmarshaler.Field2, "val2")
+
 	es.Assert().Equal(tbc.Duration, time.Second*30)
 	es.Assert().True(tbc.TestBool)
 	ipv4 := net.ParseIP("1.2.3.4")

@@ -16,8 +16,10 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
+type computedType int
+
 const (
-	typeStruct = iota
+	typeStruct computedType = iota
 	typeInt
 	typeDuration
 	typeUint
@@ -55,7 +57,7 @@ type tFieldMeta struct {
 
 	// computedType distills the type that the locators refers to,
 	// will be one of the type* constants defined above.
-	computedType int
+	computedType computedType
 
 	// if true, we unmarshal with json.Unmarshal
 	json bool
@@ -274,7 +276,7 @@ fieldLoop:
 				if tfm.computedType != typeTextUnmarshaler {
 					tfm.computedType = typeStruct
 				}
-				if tfm.json || tfl.isMap || tfl.isSlice {
+				if tfm.json || tfl.isMap || tfl.isSlice || tfm.computedType == typeTextUnmarshaler {
 					tfm.locators = []tFieldLocator{tfl}
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
@@ -300,7 +302,7 @@ fieldLoop:
 				reflect.Float64, reflect.Float32:
 
 				if tfm.computedType != typeTextUnmarshaler {
-					var cType int
+					var cType computedType
 					switch t.Kind() {
 					case reflect.String:
 						cType = typeString
@@ -572,7 +574,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 	return nil
 }
 
-func handleIntrinsicType(data []byte, ttype reflect.Type, cType int) (reflect.Value, error) {
+func handleIntrinsicType(data []byte, ttype reflect.Type, cType computedType) (reflect.Value, error) {
 	tval := reflect.New(ttype).Elem()
 	switch cType {
 	case typeInt:
