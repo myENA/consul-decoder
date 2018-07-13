@@ -65,6 +65,7 @@ type tbConfig struct {
 	Duration        time.Duration
 	IPV4            net.IP
 	IPV6            net.IP
+	TestNestedValue string `decoder:"im/several/levels/deep/testnestedvalue"`
 
 	TestTextUnmarshaler *TestTextUnmarshaler
 
@@ -159,6 +160,8 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "ipv4", "1.2.3.4")
 		es.seed(client, "ipv6", "::1")
 
+		es.seed(client, "im/several/levels/deep/testnestedvalue", "nestisthebest")
+
 		es.seed(client, "testbool", "true")
 
 		es.seed(client, "l1/uint", "1")
@@ -238,6 +241,7 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().True(ipv4.Equal(tbc.IPV4))
 	es.Assert().True(ipv6.Equal(tbc.IPV6))
 
+	es.Assert().Equal("nestisthebest", tbc.TestNestedValue)
 	es.Assert().Equal(tbc.L1.Uint, uint(1))
 	es.Assert().Equal(tbc.L1.Int, int(-2))
 	es.Assert().Equal(tbc.L1.Level2.Uint, uint64(3))
