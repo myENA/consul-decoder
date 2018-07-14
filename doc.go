@@ -17,8 +17,8 @@
 //     net.IPMask
 //
 //     struct - nested struct by default implies a consul folder with the same name.
-//              if the tag modifier "json" is encountered, then the value of in the KV
-//              is unmarshaled as json using json.Unmarshal
+//              if the tag modifier "isJSON" is encountered, then the value of in the KV
+//              is unmarshaled as isJSON using isJSON.Unmarshal
 //
 //     slice - the type can be most of the supported types, except another slice.
 //
@@ -38,7 +38,10 @@
 // but this is configurable in the Decoder struct.  the tag "-" indicates to
 // skip the field.  The modifier ",json" appended to the end
 // signals that the value is to be interpreted as json and unmarshaled rather
-// than interpreted.
+// than interpreted.  Similarly, the modififier ",csv" allows comma separated
+// values to be read into a slice, and ",ssv" allows space separated values
+// to be read intoa  slice.  For csv and ssv, slices of string, numeric and
+// boolean are supported.
 //
 //     struct Foo {
 //
@@ -62,14 +65,25 @@
 //         // are not allowed, i.e., [][]string.
 //         FooField4 []string
 //
-//         // this interprets the value of foofield5 as json data and
-//         // will send it to json.Unmarshal from encoding/json package.
+//         // this interprets the value of foofield5 as isJSON data and
+//         // will send it to isJSON.Unmarshal from encoding/isJSON package.
 //         FooField5 *SomeStruct `decoder:"foofield5,json"`
 //
 //         // this expects there to be a consul folder foofield6 and that the
 //         // keys within will correspond to the fields inside SomeStruct type.
 //         FooField6 *SomeStruct `decoder:"foofield6"`
 //
+//			// It is possible to specify arbitrarily nested values by giving
+//			// the path in the struct tag.
+//			FooField7 string `decoder:"arbitrarily/nested/key"`
+//
+//			// Comma separated values are supported.  This uses the encoding/csv
+//          // package, so all variations supported by it are supported here.
+//          FooField8 []string `decoder:",csv"
+//
+//          // Space separated values are supported.  This uses strings.Fields
+//          // for parsing, so see that documentation for information.
+//          FooField9 []string `decoder:",ssv"
 //
 //    }
 package decoder

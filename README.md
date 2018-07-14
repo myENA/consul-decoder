@@ -30,29 +30,44 @@ By default, the decoder packages looks for the struct tag "decoder". However, th
 
     struct Foo {
 
-     // populate the value from key "whatever" into FooField1
-     FooField1 string `decoder:"whatever"`
+        // populate the value from key "whatever" into FooField1
+        FooField1 string `decoder:"whatever"`
 
-     // skip populating FooField2, "-" signals skip
-     FooField2 string `decoder:"-"`
+        // skip populating FooField2, "-" signals skip
+        FooField2 string `decoder:"-"`
 
-     // this looks for a folder named FooField3
-     // and maps keys inside to the keys / values of the map.  string
-     // is the only valid key type, though the map value can be most any
-     // of the other types supported by this package.  Notable exception
-     // map, as nested maps are not allowed.  You can, however, have a
-     // map[string]SomeStruct.
-     FooField3 map[string]string
+        // this looks for a folder named FooField3
+        // and maps keys inside to the keys / values of the map.  string
+        // is the only valid key type, though the map value can be most any
+        // of the other types supported by this package.  Notable exception
+        // map, as nested maps are not allowed.  You can, however, have a
+        // map[string]SomeStruct.
+        FooField3 map[string]string
 
-     // this looks for a folder named FooField4 (case insensitive)
-     // this is similar to the map example above, but it ignores the keys
-     // inside and maps the values in-order into the slice.  nested slices
-     // are not allowed, i.e., [][]string.
-     FooField4 []string
+        // this looks for a folder named FooField4 (case insensitive)
+        // this is similar to the map example above, but it ignores the keys
+        // inside and maps the values in-order into the slice.  nested slices
+        // are not allowed, i.e., [][]string.
+        FooField4 []string
 
-     // this interprets the value of foofield5 as json data and
-     // will send it to json.Unmarshal from encoding/json package.
-     FooField5 *SomeStruct `decoder:"foofield5,json"`
+        // this interprets the value of foofield5 as json data and
+        // will send it to json.Unmarshal from encoding/json package.
+        FooField5 *SomeStruct `decoder:"foofield5,json"`
 
+        // this expects there to be a consul folder foofield6 and that the
+        // keys within will correspond to the fields inside SomeStruct type.
+        FooField6 *SomeStruct `decoder:"foofield6"`
+
+        // It is possible to specify arbitrarily nested values by giving
+        // the path in the struct tag.
+        FooField7 string `decoder:"arbitrarily/nested/key"`
+
+        // Comma separated values are supported.  This uses the encoding/csv
+        // package, so all variations supported by it are supported here.
+        FooField8 []string `decoder:",csv"
+
+        // Space separated values are supported.  This uses strings.Fields
+        // for parsing, so see that documentation for information.
+        FooField9 []string `decoder:",ssv"
 }
 ```

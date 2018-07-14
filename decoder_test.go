@@ -73,9 +73,13 @@ type tbConfig struct {
 
 	L1 *TestLevel1
 
-	NoTag     string
-	IgnoreMe  string `decoder:"-"`
-	ImSpecial string
+	NoTag           string
+	IgnoreMe        string `decoder:"-"`
+	ImSpecial       string
+	TestSpaceSepStr []string  `decoder:",ssv"`
+	TestCommaSepStr []*string `decoder:",csv"`
+	TestSpaceSepInt []int     `decoder:",ssv"`
+	TestCommaSepInt []int     `decoder:",csv"`
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
@@ -170,6 +174,10 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "l1/level2/int", "-4")
 		es.seed(client, "l1/level2/level3/uint", "5")
 		es.seed(client, "l1/level2/level3/int", "-6")
+		es.seed(client, "testspacesepstr", "one two three")
+		es.seed(client, "testcommasepstr", "\"three, with embedded comma \"\"and quotes\"\"\",four,five")
+		es.seed(client, "testspacesepint", "1 2 3")
+		es.seed(client, "testcommasepint", "6,7,8")
 
 	})
 
@@ -196,6 +204,9 @@ func (es *encoderTestSuite) TestUnmarshal() {
 
 	tbc := &tbConfig{}
 	err = decoder.Unmarshal(prefix, kvs, tbc)
+	if err != nil {
+		es.T().Fatalf("shit: %s", err)
+	}
 	es.Assert().Nil(err, "unable to unmarshal: %s", err)
 
 	es.T().Log("keys ------")
@@ -248,6 +259,11 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal(tbc.L1.Level2.Int, int64(-4))
 	es.Assert().Equal(tbc.L1.Level2.Level3.Uint, uint32(5))
 	es.Assert().Equal(tbc.L1.Level2.Level3.Int, int32(-6))
+	es.Assert().Equal(len(tbc.TestCommaSepStr), 3)
+	es.Assert().Equal(*(tbc.TestCommaSepStr[0]), `three, with embedded comma "and quotes"`)
+	es.Assert().Equal(len(tbc.TestSpaceSepStr), 3)
+	es.Assert().Equal(len(tbc.TestSpaceSepInt), 3)
+	es.Assert().Equal(len(tbc.TestCommaSepInt), 3)
 
 	es.T().Log(string(payload))
 	es.T().Logf("netmask %s", tbc.TestMask.String())

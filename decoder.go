@@ -1,7 +1,9 @@
 package decoder
 
 import (
+	"bytes"
 	"encoding"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +18,10 @@ import (
 	"github.com/hashicorp/consul/api"
 )
 
-type computedType int
+type (
+	computedType int
+	special      int
+)
 
 const (
 	typeStruct computedType = iota
@@ -30,8 +35,18 @@ const (
 	typeNetIP
 	typeNetMask
 	typeTextUnmarshaler
-
-	defTag = "decoder"
+)
+const (
+	sNone special = iota
+	sJSON
+	sCSV
+	sSSV
+)
+const (
+	tagJSON = "json"
+	tagCSV  = "csv"
+	tagSSV  = "ssv"
+	defTag  = "decoder"
 )
 
 var textUnmarshalerType = reflect.TypeOf(new(encoding.TextUnmarshaler)).Elem()
@@ -59,8 +74,23 @@ type tFieldMeta struct {
 	// will be one of the type* constants defined above.
 	computedType computedType
 
-	// if true, we unmarshal with json.Unmarshal
-	json bool
+	special special
+}
+
+func (tfm *tFieldMeta) isJSON() bool {
+	return tfm.special == sJSON
+}
+
+func (tfm *tFieldMeta) isCSV() bool {
+	return tfm.special == sCSV
+}
+
+func (tfm *tFieldMeta) isSSV() bool {
+	return tfm.special == sSSV
+}
+
+func (tfm *tFieldMeta) isNotSpecial() bool {
+	return tfm.special == sNone
 }
 
 // NameResolverFunc - this allows us to define a custom
@@ -107,6 +137,7 @@ type tFieldLocator struct {
 }
 
 func (tcm *typeCacheManager) tMeta(d *Decoder, t reflect.Type, lock bool) (*tMeta, error) {
+	// TODO this probably shouldn't lock the world.
 	if lock {
 		tcm.lck.Lock()
 		defer tcm.lck.Unlock()
@@ -176,7 +207,6 @@ fieldLoop:
 			tagName = ""
 		}
 
-		// TODO: be more less concurrenterrible.
 		if d.NameResolver == nil {
 			tfm.fieldName = defaultNameResolver(fieldName, tagName)
 		} else {
@@ -189,8 +219,13 @@ fieldLoop:
 
 		if tagLen > 1 {
 			for _, tv := range tagBits[1:] {
-				if tv == "json" {
-					tfm.json = true
+				switch tv {
+				case tagJSON:
+					tfm.special = sJSON
+				case tagCSV:
+					tfm.special = sCSV
+				case tagSSV:
+					tfm.special = sSSV
 				}
 			}
 		}
@@ -246,14 +281,14 @@ fieldLoop:
 					return nil, fmt.Errorf("slices of slices not supported, except [][]byte")
 				}
 				tfl.isSlice = true
-				if tfm.json {
+				if tfm.isJSON() {
 					tfm.locators = []tFieldLocator{tfl}
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
 				}
 				t = t.Elem()
 			case reflect.Map:
-				if tfm.json {
+				if tfm.isJSON() {
 					tfm.locators = []tFieldLocator{tfl}
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
@@ -273,10 +308,13 @@ fieldLoop:
 				t = t.Elem()
 
 			case reflect.Struct:
+				if tfm.isCSV() || tfm.isSSV() {
+					return nil, fmt.Errorf("cannot use a struct type with isSSV or isCSV")
+				}
 				if tfm.computedType != typeTextUnmarshaler {
 					tfm.computedType = typeStruct
 				}
-				if tfm.json || tfl.isMap || tfl.isSlice || tfm.computedType == typeTextUnmarshaler {
+				if tfm.isJSON() || tfl.isMap || tfl.isSlice || tfm.computedType == typeTextUnmarshaler {
 					tfm.locators = []tFieldLocator{tfl}
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
@@ -285,7 +323,7 @@ fieldLoop:
 				if err != nil {
 					return nil, err
 				}
-				if tfm.json || tfl.isSlice || tfl.isMap {
+				if tfm.isJSON() || tfl.isSlice || tfl.isMap {
 					break Outer
 				}
 				locs := []tFieldLocator{tfl}
@@ -299,9 +337,12 @@ fieldLoop:
 			case reflect.String,
 				reflect.Int, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8,
 				reflect.Uint, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8,
-				reflect.Float64, reflect.Float32:
+				reflect.Float64, reflect.Float32, reflect.Bool:
 
 				if tfm.computedType != typeTextUnmarshaler {
+					if (tfm.isCSV() || tfm.isSSV()) && !tfl.isSlice {
+						return nil, fmt.Errorf("must use a slice of strings, ints, uints, floats or bools with isCSV or isSSV")
+					}
 					var cType computedType
 					switch t.Kind() {
 					case reflect.String:
@@ -316,17 +357,14 @@ fieldLoop:
 						cType = typeUint
 					case reflect.Float64, reflect.Float32:
 						cType = typeFloat
+					case reflect.Bool:
+						cType = typeBool
 					}
 					tfm.computedType = cType
 				}
 				tfm.locators = []tFieldLocator{tfl}
 				tm.tFieldsMetaMap[tfm.fieldName] = tfm
 
-				break Outer
-			case reflect.Bool:
-				tfm.locators = []tFieldLocator{tfl}
-				tfm.computedType = typeBool
-				tm.tFieldsMetaMap[tfm.fieldName] = tfm
 				break Outer
 			default:
 				if tfm.computedType == typeTextUnmarshaler {
@@ -434,7 +472,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 		fv := tval.Field(loc.ind)
 		if loc.isSlice || loc.isMap {
 			var st reflect.Value // st will hold a reference to loc.ttype
-			if tfm.computedType == typeStruct || tfm.json {
+			if tfm.computedType == typeStruct || !tfm.isNotSpecial() {
 				st = reflect.New(loc.ttype)
 				newprefix := path.Join(prefix, tfm.fieldName) + "/"
 				key := thisPair.Key
@@ -445,11 +483,17 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 				ind := strings.TrimPrefix(key, newprefix)
 				pathparts := strings.Split(ind, "/")
 				newprefix = path.Join(newprefix, pathparts[0]) + "/"
-				if tfm.json {
+				if tfm.isJSON() {
 					err := json.Unmarshal(thisPair.Value, st.Interface())
 					if err != nil {
 						return err
 					}
+				} else if tfm.isCSV() || tfm.isSSV() {
+					t := loc.ttype
+					for i := uint8(0); i < loc.collPtrCt; i++ {
+						t = reflect.PtrTo(t)
+					}
+					st = reflect.New(reflect.SliceOf(t))
 				} else {
 					// Process all the pairs related to this prefix.
 					curatedPairs := api.KVPairs{thisPair}
@@ -470,7 +514,6 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					if err != nil {
 						return err
 					}
-
 				}
 
 			} else {
@@ -482,7 +525,9 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 				st = st.Addr()
 			}
 
-			if loc.collPtrCt == 0 && !tfm.json {
+			// once here, st represents a pointer to a loc.ttype
+
+			if loc.collPtrCt == 0 && tfm.isNotSpecial() {
 				// st is a pointer to stype, so we need to deref it.
 				st = st.Elem()
 			} else {
@@ -498,8 +543,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 			}
 
 			sfield := fv
-			if tfm.json {
-				// with json, we made the ttype be slice or map
+			if tfm.isJSON() {
 				if loc.ptrCt == 0 {
 					st = st.Elem()
 				}
@@ -542,9 +586,47 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 
 				sfield.SetMapIndex(reflect.ValueOf(splitKey[0]), st)
 			} else { // slice
-				sfield.Set(reflect.Append(sfield, st))
+				handleFields := func(fields []string, loc tFieldLocator, tfm *tFieldMeta) ([]reflect.Value, error) {
+					var vals []reflect.Value
+					for _, field := range fields {
+						v, err := handleIntrinsicType([]byte(field), loc.ttype, tfm.computedType)
+						if err != nil {
+							return nil, err
+						}
+						for i := uint8(0); i < loc.collPtrCt; i++ {
+							vp := reflect.New(v.Type())
+							vp.Elem().Set(v)
+							v = vp
+						}
+						vals = append(vals, v)
+					}
+					return vals, nil
+				}
+				var (
+					vals []reflect.Value
+				)
+				switch tfm.special {
+				case sCSV:
+					fields, err := csv.NewReader(bytes.NewReader(thisPair.Value)).Read()
+					if err != nil {
+						return err
+					}
+					vals, err = handleFields(fields, loc, tfm)
+					if err != nil {
+						return err
+					}
+				case sSSV:
+					fields := strings.Fields(string(thisPair.Value))
+					var err error
+					vals, err = handleFields(fields, loc, tfm)
+					if err != nil {
+						return err
+					}
+				default:
+					vals = []reflect.Value{st}
+				}
+				sfield.Set(reflect.Append(sfield, vals...))
 			}
-
 			return nil
 		}
 
