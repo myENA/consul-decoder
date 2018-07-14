@@ -23,8 +23,18 @@ Package decoder - this unmarshals or decodes values from a consul KV store into 
 
 Struct tags
 
-By default, the decoder packages looks for the struct tag "decoder". However, this can be overridden inside the Decoder (see godoc for details). For the purposes of examples, we'll stick with the default "decoder" tag.
-
+By default, the decoder packages looks for the struct tag "decoder". However,
+ this can be overridden inside the Decoder struct as shown below. For the 
+ purposes of examples, we'll stick with the default "decoder" tag. By default, 
+ in the absence of a decoder tag, it will look for a consul key name with the 
+ same name as the struct field. Only exported struct fields are considered. 
+ The name comparison is case-insensitive by default, but this is configurable 
+ in the Decoder struct. the tag "-" indicates to skip the field. The modifier 
+ ",json" appended to the end signals that the value is to be interpreted as 
+ json and unmarshaled rather than interpreted. Similarly, the modififier 
+ ",csv" allows comma separated values to be read into a slice, and ",ssv" 
+ allows space separated values to be read intoa slice. For csv and ssv, slices
+  of string, numeric and boolean are supported.
 
 ```go
 
