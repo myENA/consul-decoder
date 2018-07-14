@@ -64,10 +64,10 @@ By default, the decoder packages looks for the struct tag "decoder". However, th
 
         // Comma separated values are supported.  This uses the encoding/csv
         // package, so all variations supported by it are supported here.
-        FooField8 []string `decoder:",csv"
+        FooField8 []string `decoder:",csv"`
 
         // Space separated values are supported.  This uses strings.Fields
         // for parsing, so see that documentation for information.
-        FooField9 []string `decoder:",ssv"
+        FooField9 []string `decoder:",ssv"`
 }
 ```
