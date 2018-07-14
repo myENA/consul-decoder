@@ -73,17 +73,17 @@
 //         // keys within will correspond to the fields inside SomeStruct type.
 //         FooField6 *SomeStruct `decoder:"foofield6"`
 //
-//			// It is possible to specify arbitrarily nested values by giving
-//			// the path in the struct tag.
-//			FooField7 string `decoder:"arbitrarily/nested/key"`
+//          // It is possible to specify arbitrarily nested values by giving
+//          // the path in the struct tag.
+//          FooField7 string `decoder:"arbitrarily/nested/key"`
 //
-//			// Comma separated values are supported.  This uses the encoding/csv
+//          // Comma separated values are supported.  This uses the encoding/csv
 //          // package, so all variations supported by it are supported here.
-//          FooField8 []string `decoder:",csv"
+//          FooField8 []string `decoder:",csv"`
 //
 //          // Space separated values are supported.  This uses strings.Fields
 //          // for parsing, so see that documentation for information.
-//          FooField9 []string `decoder:",ssv"
+//          FooField9 []string `decoder:",ssv"`
 //
 //    }
 package decoder
