@@ -36,6 +36,8 @@ const (
 	typeNetMask
 	typeTextUnmarshaler
 )
+
+// reset iota
 const (
 	sNone special = iota
 	sJSON

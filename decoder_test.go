@@ -76,10 +76,10 @@ type tbConfig struct {
 	NoTag           string
 	IgnoreMe        string `decoder:"-"`
 	ImSpecial       string
-	TestSpaceSepStr []string  `decoder:",ssv"`
-	TestCommaSepStr []*string `decoder:",csv"`
-	TestSpaceSepInt []int     `decoder:",ssv"`
-	TestCommaSepInt []int     `decoder:",csv"`
+	TestSpaceSepStr []string   `decoder:",ssv"`
+	TestCommaSepStr *[]*string `decoder:",csv"`
+	TestSpaceSepInt []int      `decoder:",ssv"`
+	TestCommaSepInt []int      `decoder:",csv"`
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
@@ -259,8 +259,8 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal(tbc.L1.Level2.Int, int64(-4))
 	es.Assert().Equal(tbc.L1.Level2.Level3.Uint, uint32(5))
 	es.Assert().Equal(tbc.L1.Level2.Level3.Int, int32(-6))
-	es.Assert().Equal(len(tbc.TestCommaSepStr), 3)
-	es.Assert().Equal(*(tbc.TestCommaSepStr[0]), `three, with embedded comma "and quotes"`)
+	es.Assert().Equal(len(*tbc.TestCommaSepStr), 3)
+	es.Assert().Equal(*((*tbc.TestCommaSepStr)[0]), `three, with embedded comma "and quotes"`)
 	es.Assert().Equal(len(tbc.TestSpaceSepStr), 3)
 	es.Assert().Equal(len(tbc.TestSpaceSepInt), 3)
 	es.Assert().Equal(len(tbc.TestCommaSepInt), 3)

@@ -17,8 +17,8 @@
 //     net.IPMask
 //
 //     struct - nested struct by default implies a consul folder with the same name.
-//              if the tag modifier "isJSON" is encountered, then the value of in the KV
-//              is unmarshaled as isJSON using isJSON.Unmarshal
+//              if the tag modifier "json" is encountered, then the value of in the KV
+//              is unmarshaled as json using json.Unmarshal
 //
 //     slice - the type can be most of the supported types, except another slice.
 //
@@ -65,8 +65,8 @@
 //         // are not allowed, i.e., [][]string.
 //         FooField4 []string
 //
-//         // this interprets the value of foofield5 as isJSON data and
-//         // will send it to isJSON.Unmarshal from encoding/isJSON package.
+//         // this interprets the value of foofield5 as json data and
+//         // will send it to json.Unmarshal from encoding/json package.
 //         FooField5 *SomeStruct `decoder:"foofield5,json"`
 //
 //         // this expects there to be a consul folder foofield6 and that the
