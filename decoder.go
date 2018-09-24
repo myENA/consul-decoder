@@ -705,6 +705,17 @@ func handleIntrinsicType(data []byte, ttype reflect.Type, cType computedType) (r
 		}
 		tval.SetBytes([]byte(ipval))
 
+	case typeStruct:
+		v := reflect.New(ttype)
+		err := json.Unmarshal(data, v.Interface())
+		tval = v.Elem()
+		if err != nil {
+			return tval, err
+		}
+
+	default:
+		// TODO: mention this...
+		//return tval, fmt.Errorf("no support for %s types in this context", ttype)
 	}
 
 	return tval, nil
