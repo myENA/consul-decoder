@@ -51,6 +51,16 @@ func (ttu *TestTextUnmarshaler) UnmarshalText(text []byte) error {
 	return nil
 }
 
+type TestNestedJSONStructValue struct {
+	Field1 string
+	Field2 map[string]interface{}
+}
+
+type TestNestedJSONStruct struct {
+	String string
+	Value  TestNestedJSONStructValue `decoder:"Value,json"`
+}
+
 type tbConfig struct {
 	TestInlineArray     []*TestStruct  `decoder:"testInlineArray"`
 	TestInlineArray2    *[]*TestStruct `decoder:"testInlineArray2"`
@@ -80,6 +90,8 @@ type tbConfig struct {
 	TestCommaSepStr *[]*string `decoder:",csv"`
 	TestSpaceSepInt []int      `decoder:",ssv"`
 	TestCommaSepInt []int      `decoder:",csv"`
+
+	JSONStruct TestNestedJSONStruct `decoder:"testJsonStruct"`
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
@@ -179,6 +191,9 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "testspacesepint", "1 2 3")
 		es.seed(client, "testcommasepint", "6,7,8")
 
+		es.seed(client, "testJsonStruct/string", "string")
+		es.seed(client, "testJsonStruct/Value", `{"field1":"value","field2": {"map1":"value1","map2":["value2"]}}`)
+
 	})
 
 	kvs, _, err := client.KV().List(prefix, nil)
@@ -264,6 +279,10 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Equal(len(tbc.TestSpaceSepStr), 3)
 	es.Assert().Equal(len(tbc.TestSpaceSepInt), 3)
 	es.Assert().Equal(len(tbc.TestCommaSepInt), 3)
+
+	es.Assert().Equal("string", tbc.JSONStruct.String)
+	es.Assert().Equal("value", tbc.JSONStruct.Value.Field1)
+	es.Assert().IsType(make(map[string]interface{}), tbc.JSONStruct.Value.Field2)
 
 	es.T().Log(string(payload))
 	es.T().Logf("netmask %s", tbc.TestMask.String())
