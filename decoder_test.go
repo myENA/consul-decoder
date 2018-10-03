@@ -1,11 +1,10 @@
-package decoder_test
+package decoder
 
 import (
 	"encoding/json"
 	"fmt"
 	consulapi "github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/testutil"
-	"github.com/myENA/consul-decoder"
 	"github.com/stretchr/testify/suite"
 	"net"
 	"strings"
@@ -223,7 +222,7 @@ func (es *encoderTestSuite) TestUnmarshal() {
 
 	}
 
-	dec := &decoder.Decoder{
+	dec := &Decoder{
 		NameResolver: func(f, t string) string {
 			if f == "ImSpecial" {
 				return "im-special"

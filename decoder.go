@@ -331,8 +331,15 @@ fieldLoop:
 				locs := []tFieldLocator{tfl}
 				for k, etfm := range embedded.tFieldsMetaMap {
 					nk := path.Join(tfm.fieldName, k)
-					tm.tFieldsMetaMap[nk] = etfm
-					tm.tFieldsMetaMap[nk].locators = append(locs, etfm.locators...)
+
+					// Make a shallow copy of etfm to isolate locators
+					etfmcp := &tFieldMeta{}
+					*etfmcp = *etfm
+
+					// fix up copy's locators.
+					etfmcp.locators = append(locs, etfm.locators...)
+
+					tm.tFieldsMetaMap[nk] = etfmcp
 				}
 
 				break Outer
