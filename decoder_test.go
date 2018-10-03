@@ -14,27 +14,29 @@ import (
 
 const prefix = "testing"
 
-type TestStruct struct {
-	Field1 string `decoder:"field1" json:"field1"`
-	Field2 string `decoder:"field2" json:"field2"`
-}
+type (
+	TestStruct struct {
+		Field1 string `decoder:"field1" json:"field1"`
+		Field2 string `decoder:"field2" json:"field2"`
+	}
 
-type TestLevel1 struct {
-	Uint   uint
-	Int    int
-	Level2 *TestLevel2
-}
+	TestLevel1 struct {
+		Uint   uint
+		Int    int
+		Level2 *TestLevel2
+	}
 
-type TestLevel2 struct {
-	Uint   uint64
-	Int    int64
-	Level3 *TestLevel3
-}
+	TestLevel2 struct {
+		Uint   uint64
+		Int    int64
+		Level3 *TestLevel3
+	}
 
-type TestLevel3 struct {
-	Uint uint32
-	Int  int32
-}
+	TestLevel3 struct {
+		Uint uint32
+		Int  int32
+	}
+)
 
 type TestTextUnmarshaler struct {
 	Field1 string
@@ -51,15 +53,27 @@ func (ttu *TestTextUnmarshaler) UnmarshalText(text []byte) error {
 	return nil
 }
 
-type TestNestedJSONStructValue struct {
-	Field1 string
-	Field2 map[string]interface{}
-}
+type (
+	TestNestedJSONStructValue struct {
+		Field1 string
+		Field2 map[string]interface{}
+	}
+	TestNestedJSONStruct struct {
+		String string
+		Value  TestNestedJSONStructValue `decoder:"Value,json"`
+	}
+)
 
-type TestNestedJSONStruct struct {
-	String string
-	Value  TestNestedJSONStructValue `decoder:"Value,json"`
-}
+type (
+	TestReusedStruct struct {
+		Field string
+	}
+
+	TestReusesStruct struct {
+		S1 TestReusedStruct
+		S2 TestReusedStruct
+	}
+)
 
 type tbConfig struct {
 	TestInlineArray     []*TestStruct  `decoder:"testInlineArray"`
@@ -92,6 +106,8 @@ type tbConfig struct {
 	TestCommaSepInt []int      `decoder:",csv"`
 
 	JSONStruct TestNestedJSONStruct `decoder:"testJsonStruct"`
+
+	ReusesStruct TestReusesStruct `decoder:"testReusesStruct"`
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
@@ -150,7 +166,6 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	es.Assert().Nil(err, "Unable to create consul client: %s", err)
 
 	es.T().Run("Seed", func(t *testing.T) {
-
 		es.seed(client, "notag", "i should exist")
 		es.seed(client, "ignoreme", "i should not exist")
 		es.seed(client, "im-special", "super duper special")
@@ -194,6 +209,8 @@ func (es *encoderTestSuite) TestUnmarshal() {
 		es.seed(client, "testJsonStruct/string", "string")
 		es.seed(client, "testJsonStruct/Value", `{"field1":"value","field2": {"map1":"value1","map2":["value2"]}}`)
 
+		es.seed(client, "testReusesStruct/s1/field", "value1")
+		es.seed(client, "testReusesStruct/s2/field", "value2")
 	})
 
 	kvs, _, err := client.KV().List(prefix, nil)
@@ -205,7 +222,7 @@ func (es *encoderTestSuite) TestUnmarshal() {
 
 	}
 
-	decoder := &Decoder{
+	dec := &Decoder{
 		NameResolver: func(f, t string) string {
 			if f == "ImSpecial" {
 				return "im-special"
@@ -218,16 +235,16 @@ func (es *encoderTestSuite) TestUnmarshal() {
 	}
 
 	tbc := &tbConfig{}
-	err = decoder.Unmarshal(prefix, kvs, tbc)
+	err = dec.Unmarshal(prefix, kvs, tbc)
 	if err != nil {
 		es.T().Fatalf("shit: %s", err)
 	}
 	es.Assert().Nil(err, "unable to unmarshal: %s", err)
 
-	es.T().Log("keys ------")
-	for k := range typeCache.typeNameMetaMap {
-		es.T().Logf("%s\n", k)
-	}
+	//es.T().Log("keys ------")
+	//for k := range typeCache.typeNameMetaMap {
+	//	es.T().Logf("%s\n", k)
+	//}
 
 	payload, err := json.MarshalIndent(tbc, "", "    ")
 	es.Assert().Nil(err, "error from marshal: %s", err)
