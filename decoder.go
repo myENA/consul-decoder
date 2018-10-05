@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"path"
 	"reflect"
@@ -40,7 +41,6 @@ const (
 // reset iota
 const (
 	sNone special = iota
-	sJSON
 	sCSV
 	sSSV
 )
@@ -76,11 +76,9 @@ type tFieldMeta struct {
 	// will be one of the type* constants defined above.
 	computedType computedType
 
+	// This is used to capture "special" considerations, currently CSV
+	// and SSV (space separated values).
 	special special
-}
-
-func (tfm *tFieldMeta) isJSON() bool {
-	return tfm.special == sJSON
 }
 
 func (tfm *tFieldMeta) isCSV() bool {
@@ -93,6 +91,10 @@ func (tfm *tFieldMeta) isSSV() bool {
 
 func (tfm *tFieldMeta) isNotSpecial() bool {
 	return tfm.special == sNone
+}
+
+func (tfm *tFieldMeta) isSpecial() bool {
+	return !tfm.isNotSpecial()
 }
 
 // NameResolverFunc - this allows us to define a custom
@@ -132,6 +134,7 @@ type tFieldLocator struct {
 
 	isSlice bool
 	isMap   bool
+	isJSON  bool
 
 	// The actual type of the thing, after all pointers
 	// are derefed.
@@ -196,8 +199,15 @@ fieldLoop:
 		if f.PkgPath != "" && !f.Anonymous {
 			continue
 		}
-		tfm := &tFieldMeta{}
 
+		tfm := &tFieldMeta{
+			locators: []tFieldLocator{{ind: i}},
+		}
+
+		// make a shortcut for referencing the locator at the top of the stack.
+		topLoc := &(tfm.locators[0])
+
+		// Decode tags.
 		fullTag = f.Tag.Get(tagLabel)
 		tagBits = strings.Split(fullTag, ",")
 		tagLen = len(tagBits)
@@ -223,7 +233,7 @@ fieldLoop:
 			for _, tv := range tagBits[1:] {
 				switch tv {
 				case tagJSON:
-					tfm.special = sJSON
+					topLoc.isJSON = true
 				case tagCSV:
 					tfm.special = sCSV
 				case tagSSV:
@@ -236,27 +246,28 @@ fieldLoop:
 			tfm.fieldName = strings.ToLower(tfm.fieldName)
 		}
 
-		tfl := tFieldLocator{ind: i}
-
+		// Initialize t with the field type.
 		t := f.Type
 
 	Outer:
 		for {
-			tfl.ttype = t
+			// Reset ttype with each iteration of the loop.
+			// Will change for pointers, slice types, map types
+			topLoc.ttype = t
 			if t.Implements(textUnmarshalerType) {
 				tfm.computedType = typeTextUnmarshaler
 			}
 			switch t.Kind() {
 			case reflect.Ptr:
-				if tfl.isMap || tfl.isSlice {
-					tfl.collPtrCt++
-					if tfl.collPtrCt == 0 {
+				if topLoc.isMap || topLoc.isSlice {
+					topLoc.collPtrCt++
+					if topLoc.collPtrCt == 0 {
 						// overflow
 						return nil, fmt.Errorf("collection pointer count overflow detected")
 					}
 				} else {
-					tfl.ptrCt++
-					if tfl.ptrCt == 0 {
+					topLoc.ptrCt++
+					if topLoc.ptrCt == 0 {
 						// overflow
 						return nil, fmt.Errorf("pointer depth overflow detected")
 					}
@@ -273,29 +284,25 @@ fieldLoop:
 					default:
 						tfm.computedType = typeByteSlice
 					}
-					tfm.locators = []tFieldLocator{tfl}
 
-					// TODO - refactor this, don't do this all over the loop
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
 				}
-				if tfl.isSlice {
+				if topLoc.isSlice {
 					return nil, fmt.Errorf("slices of slices not supported, except [][]byte")
 				}
-				tfl.isSlice = true
-				if tfm.isJSON() {
-					tfm.locators = []tFieldLocator{tfl}
+				topLoc.isSlice = true
+				if topLoc.isJSON {
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
 				}
 				t = t.Elem()
 			case reflect.Map:
-				if tfm.isJSON() {
-					tfm.locators = []tFieldLocator{tfl}
+				if topLoc.isJSON {
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
 				}
-				if tfl.isMap {
+				if topLoc.isMap {
 					return nil, fmt.Errorf("maps to maps not supported")
 				}
 				if t.Key().Kind() != reflect.String {
@@ -306,7 +313,7 @@ fieldLoop:
 						tfm.fieldName,
 					)
 				}
-				tfl.isMap = true
+				topLoc.isMap = true
 				t = t.Elem()
 
 			case reflect.Struct:
@@ -316,19 +323,21 @@ fieldLoop:
 				if tfm.computedType != typeTextUnmarshaler {
 					tfm.computedType = typeStruct
 				}
-				if tfm.isJSON() || tfl.isMap || tfl.isSlice || tfm.computedType == typeTextUnmarshaler {
-					tfm.locators = []tFieldLocator{tfl}
+				if topLoc.isMap || topLoc.isSlice || topLoc.isJSON || tfm.computedType == typeTextUnmarshaler {
+					// no need to dive on these.  for maps and slices of structs,
+					// they are handled later in the unmarshal phase.  For JSON or TextUnmarshalers,
+					// we handle those with JSON and UnmarshalText() method calls respectively.
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 					break Outer
 				}
+
+				// If we fall through here, recursively inspect the struct and
+				// pull in its locators into our own, flattening the structure.
 				embedded, err := typeCache.tMeta(d, t, false)
 				if err != nil {
 					return nil, err
 				}
-				if tfm.isJSON() || tfl.isSlice || tfl.isMap {
-					break Outer
-				}
-				locs := []tFieldLocator{tfl}
+
 				for k, etfm := range embedded.tFieldsMetaMap {
 					nk := path.Join(tfm.fieldName, k)
 
@@ -337,7 +346,7 @@ fieldLoop:
 					*etfmcp = *etfm
 
 					// fix up copy's locators.
-					etfmcp.locators = append(locs, etfm.locators...)
+					etfmcp.locators = append(tfm.locators, etfm.locators...)
 
 					tm.tFieldsMetaMap[nk] = etfmcp
 				}
@@ -349,7 +358,7 @@ fieldLoop:
 				reflect.Float64, reflect.Float32, reflect.Bool:
 
 				if tfm.computedType != typeTextUnmarshaler {
-					if (tfm.isCSV() || tfm.isSSV()) && !tfl.isSlice {
+					if (tfm.isCSV() || tfm.isSSV()) && !topLoc.isSlice {
 						return nil, fmt.Errorf("must use a slice of strings, ints, uints, floats or bools with isCSV or isSSV")
 					}
 					var cType computedType
@@ -371,13 +380,11 @@ fieldLoop:
 					}
 					tfm.computedType = cType
 				}
-				tfm.locators = []tFieldLocator{tfl}
 				tm.tFieldsMetaMap[tfm.fieldName] = tfm
 
 				break Outer
 			default:
 				if tfm.computedType == typeTextUnmarshaler {
-					tfm.locators = []tFieldLocator{tfl}
 					tm.tFieldsMetaMap[tfm.fieldName] = tfm
 				}
 				break Outer
@@ -477,13 +484,20 @@ func isByteSlice(t reflect.Type) bool {
 
 func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.KVPairs, val reflect.Value, prefix string) error {
 	tval := val
+
 	for _, loc := range tfm.locators {
+		tk := typeKey(loc.ttype)
+		_ = tk
 		fv := tval.Field(loc.ind)
-		if loc.isSlice || loc.isMap {
+		if loc.isSlice || loc.isMap || loc.isJSON {
 			var st reflect.Value // st will hold a reference to loc.ttype
-			if tfm.computedType == typeStruct || !tfm.isNotSpecial() {
+			if tfm.computedType == typeStruct || tfm.isSpecial() {
+
 				st = reflect.New(loc.ttype)
-				newprefix := path.Join(prefix, tfm.fieldName) + "/"
+				newprefix := prefix
+				if loc.isSlice || loc.isMap {
+					newprefix = path.Join(prefix, tfm.fieldName) + "/"
+				}
 				key := thisPair.Key
 				if !d.CaseSensitive {
 					key = strings.ToLower(key)
@@ -492,11 +506,12 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 				ind := strings.TrimPrefix(key, newprefix)
 				pathparts := strings.Split(ind, "/")
 				newprefix = path.Join(newprefix, pathparts[0]) + "/"
-				if tfm.isJSON() {
+				if loc.isJSON {
 					err := json.Unmarshal(thisPair.Value, st.Interface())
 					if err != nil {
 						return err
 					}
+					log.Printf("json unmarhsal: %s => %#v", thisPair.Value, st.Interface())
 				} else if tfm.isCSV() || tfm.isSSV() {
 					t := loc.ttype
 					for i := uint8(0); i < loc.collPtrCt; i++ {
@@ -536,7 +551,7 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 
 			// once here, st represents a pointer to a loc.ttype
 
-			if loc.collPtrCt == 0 && tfm.isNotSpecial() {
+			if loc.collPtrCt == 0 && !loc.isJSON && tfm.isNotSpecial() {
 				// st is a pointer to stype, so we need to deref it.
 				st = st.Elem()
 			} else {
@@ -552,10 +567,11 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 			}
 
 			sfield := fv
-			if tfm.isJSON() {
+			if loc.isJSON {
 				if loc.ptrCt == 0 {
 					st = st.Elem()
 				}
+
 				// if ptrCt > 1, process those.
 				for i := uint8(1); i < loc.ptrCt; i++ {
 					nst := reflect.New(st.Type())
@@ -711,14 +727,6 @@ func handleIntrinsicType(data []byte, ttype reflect.Type, cType computedType) (r
 			return tval, fmt.Errorf("invalid address: %s", string(data))
 		}
 		tval.SetBytes([]byte(ipval))
-
-	case typeStruct:
-		v := reflect.New(ttype)
-		err := json.Unmarshal(data, v.Interface())
-		tval = v.Elem()
-		if err != nil {
-			return tval, err
-		}
 
 	default:
 		// TODO: mention this...
