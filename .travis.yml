@@ -3,13 +3,13 @@ sudo: false
 dist: trusty
 go:
   - 1.x
-  - 1.9.x
-  - 1.8.x
+  - 1.11.x
+  - 1.10.x
   - master
 
 env:
   DEP_VER=0.4.1
-  CONSUL_VER=1.0.7
+  CONSUL_VER=1.3.0
   PATH=$HOME/bin:$PATH
   
 install:
