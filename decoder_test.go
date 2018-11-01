@@ -1,12 +1,11 @@
 package decoder
 
 import (
-	"encoding/json"
 	"fmt"
 	consulapi "github.com/hashicorp/consul/api"
 	"github.com/hashicorp/consul/testutil"
-	"github.com/stretchr/testify/suite"
 	"net"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -128,179 +127,294 @@ func makeServerAndClientConfig(t *testing.T, cb testutil.ServerConfigCallback) (
 	return server, makeClientConfig(t, server)
 }
 
-type encoderTestSuite struct {
-	suite.Suite
-	server       *testutil.TestServer
-	clientConfig *consulapi.Config
-}
-
-func TestEncoder(t *testing.T) {
-	suite.Run(t, new(encoderTestSuite))
-}
-
-func (es *encoderTestSuite) SetupTest() {
-	// This will cause test to fail internally, no need to explicitly test.
-
-	es.server, es.clientConfig = makeServerAndClientConfig(es.T(), nil)
-}
-
-func (es *encoderTestSuite) TearDownTest() {
-	if es.server != nil {
-		es.server.Stop()
-		es.server = nil
-	}
-	if es.clientConfig != nil {
-		es.clientConfig = nil
+func seedKV(t *testing.T, client *consulapi.Client, key, value string) {
+	if _, err := client.KV().Put(&consulapi.KVPair{Key: fmt.Sprintf("%s/%s", prefix, key), Value: []byte(value)}, nil); err != nil {
+		t.Logf("Unable to put key %q: %s", key, err)
 	}
 }
 
-func (es *encoderTestSuite) seed(client *consulapi.Client, key, value string) {
-	var err error
-	_, err = client.KV().Put(&consulapi.KVPair{Key: fmt.Sprintf("%s/%s", prefix, key), Value: []byte(value)}, nil)
-	es.Assert().Nil(err, "unable to put key \"%s\": %s", key, err)
+// todo: make smarter
+
+type assertThis interface {
+	Assert(t *testing.T, actual interface{}) error
 }
 
-func (es *encoderTestSuite) TestUnmarshal() {
+type valueIs struct {
+	expected interface{}
+}
 
-	client, err := consulapi.NewClient(es.clientConfig)
-	es.Assert().Nil(err, "Unable to create consul client: %s", err)
+func (vi *valueIs) Assert(t *testing.T, actual interface{}) error {
+	// todo: probably needs improvement
+	if vi.expected == nil {
+		if actual == nil || reflect.ValueOf(actual).IsNil() {
+			return nil
+		}
+		return fmt.Errorf("failed to assert exected nil matched actual: %v", actual)
+	}
 
-	es.T().Run("Seed", func(t *testing.T) {
-		es.seed(client, "notag", "i should exist")
-		es.seed(client, "ignoreme", "i should not exist")
-		es.seed(client, "im-special", "super duper special")
-		es.seed(client, "testslicestring", "[\"foo\",\"bar\",\"baz\"]")
-		es.seed(client, "testInlineArray/one/field1", "field1rec1")
-		es.seed(client, "testInlineArray/one/field2", "field2rec1")
-		es.seed(client, "testInlineArray/two/field1", "field1rec2")
-		es.seed(client, "testInlineArray/two/field2", "field2rec2")
-		es.seed(client, "testInlineArray2/one/field1", "field1p2rec1")
-		es.seed(client, "testInlineArray2/one/field2", "field2p2rec1")
-		es.seed(client, "testInlineArray2/two/field1", "field1p2rec2")
-		es.seed(client, "testInlineArray2/two/field2", "field2p2rec2")
-		es.seed(client, "testMapStringStruct/key1/field1", "msskey1field1val")
-		es.seed(client, "testMapStringStruct/key1/field2", "msskey1field2val")
-		es.seed(client, "testMapStringStruct/key2/field1", "msskey2field1val")
-		es.seed(client, "testMapStringStruct/key2/field2", "msskey2field2val")
-		es.seed(client, "testMapStringStruct/key3/field1", "msskey3field1val")
-		es.seed(client, "testMapStringStruct/key3/field2", "msskey3field2val")
-		es.seed(client, "testmapstringstring/key1", "value1")
-		es.seed(client, "testmapstringstring/key2", "value2")
-		es.seed(client, "testtextunmarshaler", "val1:val2")
-		es.seed(client, "duration", "30s")
-		es.seed(client, "ipv4", "1.2.3.4")
-		es.seed(client, "ipv6", "::1")
+	et := reflect.TypeOf(vi.expected)
+	at := reflect.TypeOf(actual)
 
-		es.seed(client, "im/several/levels/deep/testnestedvalue", "nestisthebest")
+	if !et.Comparable() {
+		t.Fatalf("Provided non-comparable \"expected\" value: %+v", vi.expected)
+	}
 
-		es.seed(client, "testbool", "true")
+	if et.Kind() != at.Kind() {
+		return fmt.Errorf("failed to assert expected %v matches actual: %v", vi.expected, actual)
+	}
 
-		es.seed(client, "l1/uint", "1")
-		es.seed(client, "l1/int", "-2")
-		es.seed(client, "l1/level2/uint", "3")
-		es.seed(client, "l1/level2/int", "-4")
-		es.seed(client, "l1/level2/level3/uint", "5")
-		es.seed(client, "l1/level2/level3/int", "-6")
-		es.seed(client, "testspacesepstr", "one two three")
-		es.seed(client, "testcommasepstr", "\"three, with embedded comma \"\"and quotes\"\"\",four,five")
-		es.seed(client, "testspacesepint", "1 2 3")
-		es.seed(client, "testcommasepint", "6,7,8")
+	if reflect.ValueOf(vi.expected).Interface() != reflect.ValueOf(actual).Interface() {
+		return fmt.Errorf("failed to assert expected %v matches actual: %v", vi.expected, actual)
+	}
 
-		es.seed(client, "testJsonStruct/string", "string")
-		es.seed(client, "testJsonStruct/Value", `{"field1":"value","field2": {"map1":"value1","map2":["value2"]}}`)
+	return nil
+}
 
-		es.seed(client, "testReusesStruct/s1/field", "value1")
-		es.seed(client, "testReusesStruct/s2/field", "value2")
+type lenIs struct {
+	expected int
+}
+
+func (li *lenIs) Assert(t *testing.T, actual interface{}) error {
+	// todo: handle pointers
+	at := reflect.TypeOf(actual)
+
+	if at.Kind() == reflect.Ptr {
+		at = reflect.TypeOf(at.Elem())
+	}
+
+	switch at.Kind() {
+	case reflect.Array:
+		al := at.Len()
+		if li.expected != al {
+			return fmt.Errorf("failed to assert expected len %d matched actual: %d", li.expected, al)
+		}
+	case reflect.Slice:
+		al := reflect.ValueOf(actual).Len()
+		if li.expected != al {
+			return fmt.Errorf("failed to assert expected len %d matched actual: %d", li.expected, al)
+		}
+	case reflect.Map:
+		al := len(reflect.ValueOf(actual).MapKeys())
+		if li.expected != al {
+			return fmt.Errorf("failed to assert expected len %d matched actual: %d", li.expected, al)
+		}
+	default:
+		return fmt.Errorf("failed to assert expected len %d on actual: %+v", li.expected, actual)
+	}
+
+	return nil
+}
+
+type isTrue uint8
+
+func (isTrue) Assert(t *testing.T, actual interface{}) error {
+	if b, ok := actual.(bool); !ok || !b {
+		return fmt.Errorf("failed to assert expected value %t matched actual: %+v", true, actual)
+	}
+	return nil
+}
+
+type isType struct {
+	expected interface{}
+}
+
+func (it *isType) Assert(t *testing.T, actual interface{}) error {
+	// todo: probably needs improvement
+	if it.expected == nil {
+		if actual == nil || reflect.ValueOf(actual).IsNil() {
+			return nil
+		}
+		return fmt.Errorf("failed to assert exected nil matched actual: %v", actual)
+	}
+	et := reflect.TypeOf(it.expected)
+	at := reflect.TypeOf(actual)
+	if et != at {
+		return fmt.Errorf("failed to assert that expected type %s matched actual: %s", et, at)
+	}
+	return nil
+}
+
+func TestUnmarshal(t *testing.T) {
+	server, clientConfig := makeServerAndClientConfig(t, nil)
+
+	client, err := consulapi.NewClient(clientConfig)
+	if err != nil {
+		t.Logf("Unable to create consul client: %s", err)
+		t.FailNow()
+	}
+
+	var (
+		kvs consulapi.KVPairs
+		dec = &Decoder{
+			NameResolver: func(f, t string) string {
+				if f == "ImSpecial" {
+					return "im-special"
+				} else if t != "" {
+					return t
+				} else {
+					return f
+				}
+			},
+		}
+	)
+
+	t.Run("Seed", func(t *testing.T) {
+		seeds := []struct {
+			key   string
+			value string
+		}{
+			{"notag", "i should exist"},
+			{"ignoreme", "i should not exist"},
+			{"im-special", "super duper special"},
+			{"testslicestring", "[\"foo\",\"bar\",\"baz\"]"},
+			{"testInlineArray/one/field1", "field1rec1"},
+			{"testInlineArray/one/field2", "field2rec1"},
+			{"testInlineArray/two/field1", "field1rec2"},
+			{"testInlineArray/two/field2", "field2rec2"},
+			{"testInlineArray2/one/field1", "field1p2rec1"},
+			{"testInlineArray2/one/field2", "field2p2rec1"},
+			{"testInlineArray2/two/field1", "field1p2rec2"},
+			{"testInlineArray2/two/field2", "field2p2rec2"},
+			{"testMapStringStruct/key1/field1", "msskey1field1val"},
+			{"testMapStringStruct/key1/field2", "msskey1field2val"},
+			{"testMapStringStruct/key2/field1", "msskey2field1val"},
+			{"testMapStringStruct/key2/field2", "msskey2field2val"},
+			{"testMapStringStruct/key3/field1", "msskey3field1val"},
+			{"testMapStringStruct/key3/field2", "msskey3field2val"},
+			{"testmapstringstring/key1", "value1"},
+			{"testmapstringstring/key2", "value2"},
+			{"testtextunmarshaler", "val1:val2"},
+			{"duration", "30s"},
+			{"ipv4", "1.2.3.4"},
+			{"ipv6", "::1"},
+
+			{"im/several/levels/deep/testnestedvalue", "nestisthebest"},
+
+			{"testbool", "true"},
+
+			{"l1/uint", "1"},
+			{"l1/int", "-2"},
+			{"l1/level2/uint", "3"},
+			{"l1/level2/int", "-4"},
+			{"l1/level2/level3/uint", "5"},
+			{"l1/level2/level3/int", "-6"},
+			{"testspacesepstr", "one two three"},
+			{"testcommasepstr", "\"three, with embedded comma \"\"and quotes\"\"\",four,five"},
+			{"testspacesepint", "1 2 3"},
+			{"testcommasepint", "6,7,8"},
+
+			{"testJsonStruct/string", "string"},
+			{"testJsonStruct/Value", `{"field1":"value","field2": {"map1":"value1","map2":["value2"]}}`},
+
+			{"testReusesStruct/s1/field", "value1"},
+			{"testReusesStruct/s2/field", "value2"},
+		}
+
+		for _, seed := range seeds {
+			seedKV(t, client, seed.key, seed.value)
+		}
 	})
 
-	kvs, _, err := client.KV().List(prefix, nil)
-	es.Assert().Nil(err, "Unable to list keys: \"%s\"", err)
-
-	es.T().Log("kvs")
-	for _, kv := range kvs {
-		es.T().Logf("%s => %s", kv.Key, string(kv.Value))
-
-	}
-
-	dec := &Decoder{
-		NameResolver: func(f, t string) string {
-			if f == "ImSpecial" {
-				return "im-special"
-			} else if t != "" {
-				return t
-			} else {
-				return f
+	t.Run("Fetch", func(t *testing.T) {
+		var err error
+		if kvs, _, err = client.KV().List(prefix, nil); err != nil {
+			t.Logf("Unable to list keys: %s", err)
+			t.FailNow()
+		} else {
+			t.Log("kvs")
+			for _, kv := range kvs {
+				t.Logf("%s => %s", kv.Key, string(kv.Value))
 			}
-		},
-	}
+		}
+	})
 
-	tbc := &tbConfig{}
-	err = dec.Unmarshal(prefix, kvs, tbc)
-	if err != nil {
-		es.T().Fatalf("shit: %s", err)
-	}
-	es.Assert().Nil(err, "unable to unmarshal: %s", err)
+	t.Run("Unmarshal", func(t *testing.T) {
+		tbc := &tbConfig{}
+		err = dec.Unmarshal(prefix, kvs, tbc)
+		if err != nil {
+			t.Fatalf("shit: %s", err)
+		}
 
-	//es.T().Log("keys ------")
-	//for k := range typeCache.typeNameMetaMap {
-	//	es.T().Logf("%s\n", k)
-	//}
+		//t.Log("keys ------")
+		//for k := range typeCache.typeNameMetaMap {
+		//	t.Logf("%s\n", k)
+		//}
 
-	payload, err := json.MarshalIndent(tbc, "", "    ")
-	es.Assert().Nil(err, "error from marshal: %s", err)
+		//payload, err := json.MarshalIndent(tbc, "", "    ")
+		//if err != nil {
+		//	t.Logf("Unable to marshal indent: %s", err)
+		//	t.FailNow()
+		//}
 
-	es.Assert().Equal("", tbc.IgnoreMe)
-	es.Assert().Equal("super duper special", tbc.ImSpecial)
-	es.Assert().Equal("i should exist", tbc.NoTag)
-	es.Assert().Len(tbc.TestSliceString, 3, "length not correct: %#v", tbc.TestSliceString)
-	es.Assert().Equal(tbc.TestMapStringString["key1"], "value1")
-	es.Assert().Equal(tbc.TestMapStringString["key2"], "value2")
-	es.Assert().Len(tbc.TestInlineArray, 2)
-	es.Assert().Equal(tbc.TestInlineArray[0].Field1, "field1rec1")
-	es.Assert().Equal(tbc.TestInlineArray[0].Field2, "field2rec1")
-	es.Assert().Equal(tbc.TestInlineArray[1].Field1, "field1rec2")
-	es.Assert().Equal(tbc.TestInlineArray[1].Field2, "field2rec2")
-	es.Assert().Len(*tbc.TestInlineArray2, 2)
-	es.Assert().Equal((*tbc.TestInlineArray2)[0].Field1, "field1p2rec1")
-	es.Assert().Equal((*tbc.TestInlineArray2)[0].Field2, "field2p2rec1")
-	es.Assert().Equal((*tbc.TestInlineArray2)[1].Field1, "field1p2rec2")
-	es.Assert().Equal((*tbc.TestInlineArray2)[1].Field2, "field2p2rec2")
-	es.Assert().Len(tbc.TestMapStringStruct, 3)
-	es.Assert().Equal(tbc.TestMapStringStruct["key1"].Field1, "msskey1field1val")
-	es.Assert().Equal(tbc.TestMapStringStruct["key1"].Field2, "msskey1field2val")
-	es.Assert().Equal(tbc.TestMapStringStruct["key2"].Field1, "msskey2field1val")
-	es.Assert().Equal(tbc.TestMapStringStruct["key2"].Field2, "msskey2field2val")
-	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field1, "msskey3field1val")
-	es.Assert().Equal(tbc.TestMapStringStruct["key3"].Field2, "msskey3field2val")
+		// todo: clean up a bit
 
-	es.Assert().Equal(tbc.TestTextUnmarshaler.Field1, "val1")
-	es.Assert().Equal(tbc.TestTextUnmarshaler.Field2, "val2")
+		ipv4 := net.ParseIP("1.2.3.4")
+		ipv6 := net.ParseIP("::1")
 
-	es.Assert().Equal(tbc.Duration, time.Second*30)
-	es.Assert().True(tbc.TestBool)
-	ipv4 := net.ParseIP("1.2.3.4")
-	ipv6 := net.ParseIP("::1")
+		tests := []struct {
+			asserter assertThis
+			value    interface{}
+			msg      []interface{}
+		}{
+			{&valueIs{""}, tbc.IgnoreMe, nil},
+			{&valueIs{"super duper special"}, tbc.ImSpecial, nil},
+			{&valueIs{"i should exist"}, tbc.NoTag, nil},
+			{&lenIs{3}, tbc.TestSliceString, nil},
+			{&valueIs{"value1"}, tbc.TestMapStringString["key1"], nil},
+			{&valueIs{"value2"}, tbc.TestMapStringString["key2"], nil},
+			{&lenIs{2}, tbc.TestInlineArray, nil},
+			{&valueIs{"field1rec1"}, tbc.TestInlineArray[0].Field1, nil},
+			{&valueIs{"field2rec1"}, tbc.TestInlineArray[0].Field2, nil},
+			{&valueIs{"field1rec2"}, tbc.TestInlineArray[1].Field1, nil},
+			{&valueIs{"field2rec2"}, tbc.TestInlineArray[1].Field2, nil},
+			{&lenIs{2}, *tbc.TestInlineArray2, nil},
+			{&valueIs{"field1p2rec1"}, (*tbc.TestInlineArray2)[0].Field1, nil},
+			{&valueIs{"field2p2rec1"}, (*tbc.TestInlineArray2)[0].Field2, nil},
+			{&valueIs{"field1p2rec2"}, (*tbc.TestInlineArray2)[1].Field1, nil},
+			{&valueIs{"field2p2rec2"}, (*tbc.TestInlineArray2)[1].Field2, nil},
+			{&lenIs{3}, tbc.TestMapStringStruct, nil},
+			{&valueIs{"msskey1field1val"}, tbc.TestMapStringStruct["key1"].Field1, nil},
+			{&valueIs{"msskey1field2val"}, tbc.TestMapStringStruct["key1"].Field2, nil},
+			{&valueIs{"msskey2field1val"}, tbc.TestMapStringStruct["key2"].Field1, nil},
+			{&valueIs{"msskey2field2val"}, tbc.TestMapStringStruct["key2"].Field2, nil},
+			{&valueIs{"msskey3field1val"}, tbc.TestMapStringStruct["key3"].Field1, nil},
+			{&valueIs{"msskey3field2val"}, tbc.TestMapStringStruct["key3"].Field2, nil},
+			{&valueIs{"val1"}, tbc.TestTextUnmarshaler.Field1, nil},
+			{&valueIs{"val2"}, tbc.TestTextUnmarshaler.Field2, nil},
+			{&valueIs{time.Second * 30}, tbc.Duration, nil},
+			{new(isTrue), tbc.TestBool, nil},
+			{new(isTrue), ipv4.Equal(tbc.IPV4), nil},
+			{new(isTrue), ipv6.Equal(tbc.IPV6), nil},
+			{&valueIs{"nestisthebest"}, tbc.TestNestedValue, nil},
+			{&valueIs{uint(1)}, tbc.L1.Uint, nil},
+			{&valueIs{int(-2)}, tbc.L1.Int, nil},
+			{&valueIs{uint64(3)}, tbc.L1.Level2.Uint, nil},
+			{&valueIs{int64(-4)}, tbc.L1.Level2.Int, nil},
+			{&valueIs{uint32(5)}, tbc.L1.Level2.Level3.Uint, nil},
+			{&valueIs{int32(-6)}, tbc.L1.Level2.Level3.Int, nil},
+			{&lenIs{3}, *tbc.TestCommaSepStr, nil},
+			{&valueIs{`three, with embedded comma "and quotes"`}, *((*tbc.TestCommaSepStr)[0]), nil},
+			{&lenIs{3}, tbc.TestSpaceSepStr, nil},
+			{&lenIs{3}, tbc.TestSpaceSepInt, nil},
+			{&lenIs{3}, tbc.TestCommaSepInt, nil},
+			{&valueIs{"string"}, tbc.JSONStruct.String, nil},
+			{&valueIs{"value"}, tbc.JSONStruct.Value.Field1, nil},
+			{&isType{make(map[string]interface{})}, tbc.JSONStruct.Value.Field2, nil},
+		}
 
-	es.Assert().True(ipv4.Equal(tbc.IPV4))
-	es.Assert().True(ipv6.Equal(tbc.IPV6))
+		for _, test := range tests {
+			if err := test.asserter.Assert(t, test.value); err != nil {
+				t.Log(err.Error())
+				if len(test.msg) > 0 {
+					t.Log(test.msg...)
+				}
+				t.Fail()
+			}
+		}
 
-	es.Assert().Equal("nestisthebest", tbc.TestNestedValue)
-	es.Assert().Equal(tbc.L1.Uint, uint(1))
-	es.Assert().Equal(tbc.L1.Int, int(-2))
-	es.Assert().Equal(tbc.L1.Level2.Uint, uint64(3))
-	es.Assert().Equal(tbc.L1.Level2.Int, int64(-4))
-	es.Assert().Equal(tbc.L1.Level2.Level3.Uint, uint32(5))
-	es.Assert().Equal(tbc.L1.Level2.Level3.Int, int32(-6))
-	es.Assert().Equal(len(*tbc.TestCommaSepStr), 3)
-	es.Assert().Equal(*((*tbc.TestCommaSepStr)[0]), `three, with embedded comma "and quotes"`)
-	es.Assert().Equal(len(tbc.TestSpaceSepStr), 3)
-	es.Assert().Equal(len(tbc.TestSpaceSepInt), 3)
-	es.Assert().Equal(len(tbc.TestCommaSepInt), 3)
+		//t.Log(string(payload))
+		t.Logf("netmask %s", tbc.TestMask.String())
+	})
 
-	es.Assert().Equal("string", tbc.JSONStruct.String)
-	es.Assert().Equal("value", tbc.JSONStruct.Value.Field1)
-	es.Assert().IsType(make(map[string]interface{}), tbc.JSONStruct.Value.Field2)
-
-	es.T().Log(string(payload))
-	es.T().Logf("netmask %s", tbc.TestMask.String())
+	server.Stop()
 }
