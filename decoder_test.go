@@ -1,14 +1,16 @@
 package decoder
 
 import (
+	"bytes"
 	"fmt"
-	consulapi "github.com/hashicorp/consul/api"
-	"github.com/hashicorp/consul/testutil"
 	"net"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	consulapi "github.com/hashicorp/consul/api"
+	"github.com/hashicorp/consul/testutil"
 )
 
 const prefix = "testing"
@@ -82,13 +84,12 @@ type tbConfig struct {
 
 	TestByteSlice   []byte        `decoder:"testbyteslice"`
 	TestDuration    time.Duration `decoder:"testDuration"`
-	TestIP          net.IP        `decoder:"testIP"`
-	TestMask        net.IPMask    `decoder:"testMask"`
 	TestSliceString []string      `decoder:"testslicestring,json"`
 	Duration        time.Duration
 	IPV4            net.IP
 	IPV6            net.IP
-	TestNestedValue string `decoder:"im/several/levels/deep/testnestedvalue"`
+	TestMask        net.IPMask `decoder:"testMask"`
+	TestNestedValue string     `decoder:"im/several/levels/deep/testnestedvalue"`
 
 	TestTextUnmarshaler *TestTextUnmarshaler
 
@@ -287,6 +288,7 @@ func TestUnmarshal(t *testing.T) {
 			{"duration", "30s"},
 			{"ipv4", "1.2.3.4"},
 			{"ipv6", "::1"},
+			{"testMask", "255.255.255.0"},
 
 			{"im/several/levels/deep/testnestedvalue", "nestisthebest"},
 
@@ -335,21 +337,10 @@ func TestUnmarshal(t *testing.T) {
 			t.Fatalf("shit: %s", err)
 		}
 
-		//t.Log("keys ------")
-		//for k := range typeCache.typeNameMetaMap {
-		//	t.Logf("%s\n", k)
-		//}
-
-		//payload, err := json.MarshalIndent(tbc, "", "    ")
-		//if err != nil {
-		//	t.Logf("Unable to marshal indent: %s", err)
-		//	t.FailNow()
-		//}
-
-		// todo: clean up a bit
-
 		ipv4 := net.ParseIP("1.2.3.4")
 		ipv6 := net.ParseIP("::1")
+
+		netmask := net.IPMask(net.ParseIP("255.255.255.0"))
 
 		tests := []struct {
 			asserter assertThis
@@ -385,6 +376,7 @@ func TestUnmarshal(t *testing.T) {
 			{new(isTrue), tbc.TestBool, nil},
 			{new(isTrue), ipv4.Equal(tbc.IPV4), nil},
 			{new(isTrue), ipv6.Equal(tbc.IPV6), nil},
+			{new(isTrue), bytes.Equal(netmask, tbc.TestMask), []interface{}{netmask, tbc.TestMask}},
 			{&valueIs{"nestisthebest"}, tbc.TestNestedValue, nil},
 			{&valueIs{uint(1)}, tbc.L1.Uint, nil},
 			{&valueIs{int(-2)}, tbc.L1.Int, nil},
@@ -412,9 +404,8 @@ func TestUnmarshal(t *testing.T) {
 			}
 		}
 
-		//t.Log(string(payload))
-		t.Logf("netmask %s", tbc.TestMask.String())
 	})
 
 	server.Stop()
+
 }
