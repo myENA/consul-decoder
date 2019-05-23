@@ -3,6 +3,7 @@
 [![GoDoc](https://godoc.org/github.com/myENA/consul-decoder?status.svg)](https://godoc.org/github.com/myENA/consul-decoder)
 [![Build Status](https://travis-ci.org/myENA/consul-decoder.svg?branch=master)](https://travis-ci.org/myENA/consul-decoder)
 
+Note - The latest version supports only go 1.11 or later since swithcing to go modules.  For older versions of go, pin to the v0.2.3 tag.
 
 Package decoder - this unmarshals or decodes values from a consul KV store into a struct. The following types are supported:
 
