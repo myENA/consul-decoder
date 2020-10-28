@@ -111,7 +111,7 @@ type tbConfig struct {
 }
 
 func makeServer(t *testing.T, cb testutil.ServerConfigCallback) *testutil.TestServer {
-	server, err := testutil.NewTestServerConfig(cb)
+	server, err := testutil.NewTestServerConfigT(t, cb)
 	if nil != err {
 		t.Fatalf("Unable to initialize Consul agent server: %v", err)
 	}

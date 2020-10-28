@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"path"
 	"reflect"
@@ -511,7 +510,6 @@ func (d *Decoder) allocAssign(tfm *tFieldMeta, thisPair *api.KVPair, rest *api.K
 					if err != nil {
 						return err
 					}
-					log.Printf("json unmarhsal: %s => %#v", thisPair.Value, st.Interface())
 				} else if tfm.isCSV() || tfm.isSSV() {
 					t := loc.ttype
 					for i := uint8(0); i < loc.collPtrCt; i++ {
