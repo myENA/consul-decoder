@@ -1,7 +1,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/myENA/consul-decoder)](https://goreportcard.com/report/github.com/myENA/consul-decoder)
-[![GoDoc](https://godoc.org/github.com/myENA/consul-decoder?status.svg)](https://godoc.org/github.com/myENA/consul-decoder)
-[![Build Status](https://travis-ci.org/myENA/consul-decoder.svg?branch=master)](https://travis-ci.org/myENA/consul-decoder)
+[![GoDoc](https://godoc.org/github.com/myENA/consul-decoder?status.svg)](https://pkg.go.dev/github.com/myENA/consul-decoder)
+[![Build Status](https://github.com/myENA/consul-decoder/actions/workflows/build.yml/badge.svg)](https://github.com/myENA/consul-decoder/actions/workflows/build.yml)
 
 Note - The latest version supports only go 1.11 or later since swithcing to go modules.  For older versions of go, pin to the v0.2.3 tag.
 
