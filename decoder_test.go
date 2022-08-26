@@ -317,7 +317,7 @@ func TestUnmarshal(t *testing.T) {
 		}
 	})
 
-	t.Run("Fetch", func(t *testing.T) {
+	t.Run("FetchOCSP", func(t *testing.T) {
 		var err error
 		if kvs, _, err = client.KV().List(prefix, nil); err != nil {
 			t.Logf("Unable to list keys: %s", err)
