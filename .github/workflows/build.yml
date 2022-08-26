@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Install consul
         run: |
-          wget "https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip"
+          wget --quiet "https://releases.hashicorp.com/consul/${CONSUL_VER}/consul_${CONSUL_VER}_linux_amd64.zip"
           mkdir -p $HOME/bin
           unzip -d $HOME/bin consul_${CONSUL_VER}_linux_amd64.zip
       - name: Test
